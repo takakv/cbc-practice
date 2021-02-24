@@ -8,32 +8,27 @@
 
 byte *gen_rand_bytestream(int byteCount) {
     byte *stream = malloc(byteCount);
-    for (int i = 0; i < byteCount; ++i) {
-        stream[i] = rand();
-    }
+    for (int i = 0; i < byteCount; ++i) stream[i] = rand();
     return stream;
 }
 
 void get_byte_array(const char *sourceText, byte *byteArray) {
     int sourceLen = (int) strlen(sourceText);
-    for (int i = 0; i < sourceLen; ++i) byteArray[i] = 0;
-
-    for (int i = 0; i < sourceLen; ++i) {
-        byteArray[i] = sourceText[i];
-    }
+    for (int i = 0; i < sourceLen; ++i) byteArray[i] = sourceText[i];
 }
 
 void xor_byte_arrays(const byte *in1, const byte *in2, byte *out) {
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
-        out[i] = in1[i] ^ in2[i];
-    }
+    for (int i = 0; i < BLOCK_SIZE; ++i) out[i] = in1[i] ^ in2[i];
+}
+
+// Copy bytes from one byte array to another.
+void bytecpy(byte *dest, const byte *src) {
+    for (int i = 0; i < BLOCK_SIZE; ++i) dest[i] = src[i];
 }
 
 // For now it is the same function as above, but I separated it for future proofing.
 void encdec(const byte *in, const byte *key, byte *out) {
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
-        out[i] = in[i] ^ key[i];
-    }
+    for (int i = 0; i < BLOCK_SIZE; ++i) out[i] = in[i] ^ key[i];
 }
 
 int main() {
@@ -61,20 +56,15 @@ int main() {
     byte plaintextBytes[sourceLen];
     get_byte_array(plaintext, plaintextBytes);
 
-    // Split plaintext into blocks, prepare ciphertext blocks.
+    // Split plaintext into blocks, prepare blocks to store texts in.
     const int blockCount = sourceLen / BLOCK_SIZE + 1;
-    byte plainByteBlocks[blockCount][BLOCK_SIZE], cipherByteBlocks[blockCount][BLOCK_SIZE];
-
-
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
-        plainByteBlocks[blockCount - 1][i] = 0;
-    }
+    byte byteBlocks[blockCount][BLOCK_SIZE];
 
     int bytePos = 0;
     while (bytePos < sourceLen) {
-        for (int j = 0; j < blockCount; ++j) {
-            for (int k = 0; k < BLOCK_SIZE; ++k) {
-                plainByteBlocks[j][k] = plaintextBytes[bytePos++];
+        for (int i = 0; i < blockCount; ++i) {
+            for (int j = 0; j < BLOCK_SIZE; ++j) {
+                byteBlocks[i][j] = plaintextBytes[bytePos++];
             }
         }
     }
@@ -84,7 +74,7 @@ int main() {
     printf("Plaintext blocks (concatenated): ");
     for (int i = 0; i < blockCount; ++i) {
         for (int j = 0; j < BLOCK_SIZE; ++j) {
-            printf("%c", plainByteBlocks[i][j]);
+            printf("%c", byteBlocks[i][j]);
         }
     }
     printf("\n\n");
@@ -96,21 +86,21 @@ int main() {
 
         if (i == 0) {
             // XOR the first block with the IV.
-            xor_byte_arrays(IV, plainByteBlocks[i], tempStore);
+            xor_byte_arrays(IV, byteBlocks[i], tempStore);
         } else {
             // XOR encryption result of previous block with current block plaintext.
-            xor_byte_arrays(cipherByteBlocks[i - 1], plainByteBlocks[i], tempStore);
+            xor_byte_arrays(byteBlocks[i - 1], byteBlocks[i], tempStore);
         }
 
         // Encrypt the XOR result and store in the encrypted blocks.
-        encdec(tempStore, keyBytes, cipherByteBlocks[i]);
+        encdec(tempStore, keyBytes, byteBlocks[i]);
     }
 
     // DEBUG: Verify blocks.
     printf("Encrypted block output (hex):\n");
     for (int i = 0; i < blockCount; ++i) {
         for (int j = 0; j < BLOCK_SIZE; ++j) {
-            printf("%02x", cipherByteBlocks[i][j]);
+            printf("%02x", byteBlocks[i][j]);
         }
         if ((i + 1) % 3 == 0) printf("\n");
         else printf(" ");
@@ -118,27 +108,36 @@ int main() {
     printf("\n\n");
 
     // CBC decryption process.
+    // Store the first encrypted block.
+    byte cipherStore[BLOCK_SIZE];
+    bytecpy(cipherStore, byteBlocks[0]);
+
     for (int i = 0; i < blockCount; ++i) {
-        // Temporarily store the result of ciphertext XOR plaintext.
-        byte tempStore[BLOCK_SIZE];
+        // Temporarily store the result of decrypted ciphertext, and its XOR with previous ciphertext.
+        byte tempStore[BLOCK_SIZE], plainStore[BLOCK_SIZE];
 
         // Decrypt the encrypted block.
-        encdec(cipherByteBlocks[i], keyBytes, tempStore);
+        encdec(byteBlocks[i], keyBytes, tempStore);
 
         if (i == 0) {
             // XOR the first decryption result with the IV.
-            xor_byte_arrays(IV, tempStore, plainByteBlocks[i]);
+            xor_byte_arrays(IV, tempStore, plainStore);
         } else {
             // XOR decryption result of current ciphertext block with the previous ciphertext block.
-            xor_byte_arrays(cipherByteBlocks[i - 1], tempStore, plainByteBlocks[i]);
+            xor_byte_arrays(cipherStore, tempStore, plainStore);
         }
+
+        // Store the ciphertext for the next iteration.
+        bytecpy(cipherStore, byteBlocks[i]);
+        // Replace ciphertext with plaintext.
+        bytecpy(byteBlocks[i], plainStore);
     }
 
     // DEBUG: Verify blocks.
     printf("Decrypted blocks (concatenated):\n");
     for (int i = 0; i < blockCount; ++i) {
         for (int j = 0; j < BLOCK_SIZE; ++j) {
-            printf("%c", plainByteBlocks[i][j]);
+            printf("%c", byteBlocks[i][j]);
         }
     }
 
