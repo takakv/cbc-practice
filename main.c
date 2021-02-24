@@ -61,12 +61,16 @@ int main() {
     byte byteBlocks[blockCount][BLOCK_SIZE];
 
     int bytePos = 0;
-    while (bytePos < sourceLen) {
-        for (int i = 0; i < blockCount; ++i) {
-            for (int j = 0; j < BLOCK_SIZE; ++j) {
-                byteBlocks[i][j] = plaintextBytes[bytePos++];
-            }
+    for (int i = 0; i < blockCount; ++i) {
+        for (int j = 0; j < BLOCK_SIZE; ++j) {
+            byteBlocks[i][j] = plaintextBytes[bytePos++];
         }
+    }
+
+    // Get rid of potential overflow in last block.
+    int padding = bytePos - sourceLen;
+    for (int i = BLOCK_SIZE - padding; i < BLOCK_SIZE; ++i) {
+        byteBlocks[blockCount - 1][i] = '\0';
     }
 
     // DEBUG: Verify blocks.
